@@ -3,7 +3,6 @@ package me.gabij.multiplebedspawn.listeners;
 import me.gabij.multiplebedspawn.MultipleBedSpawn;
 import me.gabij.multiplebedspawn.models.BedsDataType;
 import me.gabij.multiplebedspawn.models.PlayerBedsData;
-import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -14,6 +13,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,7 +32,6 @@ public class PlayerGetsOnBedListener implements Listener {
 
     @EventHandler
     public void onPlayerGetOnBed(PlayerBedEnterEvent e) {
-
         Player player = e.getPlayer();
         String world = player.getWorld().getName();
         List<String> denylist = plugin.getConfig().getStringList("denylist");
@@ -52,12 +52,10 @@ public class PlayerGetsOnBedListener implements Listener {
             }
 
             if (playerBedsCount < maxBeds) {
-
                 UUID randomUUID = UUID.randomUUID();
                 BlockState blockState = bed.getState();
 
-                if (blockState instanceof TileState tileState) { // sets a randomUUID to the bed if the bed doesnt have
-                                                                 // it or get the bed uuid
+                if (blockState instanceof TileState tileState) {
                     PersistentDataContainer container = tileState.getPersistentDataContainer();
 
                     if (!container.has(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING)) {
@@ -68,40 +66,32 @@ public class PlayerGetsOnBedListener implements Listener {
                         if ((playerBedsData == null
                                 || (playerBedsData != null && !playerBedsData.hasBed(randomUUID.toString())))
                                 && plugin.getConfig().getBoolean("exclusive-bed")) {
-                            player.sendMessage(ChatColor.RED + plugin.getMessages("bed-already-has-owner"));
+                            player.sendMessage(Component.text(plugin.getMessages("bed-already-has-owner"), NamedTextColor.RED));
                             return;
                         }
                     }
-
                     tileState.update();
-
                 }
 
                 boolean registerBed = false;
-                if (playerBedsData == null) { // if the player doesnt have any bed
-
+                if (playerBedsData == null) {
                     playerBedsData = new PlayerBedsData(player, bed, randomUUID.toString());
                     registerBed = true;
-
                 } else if (!playerBedsData.hasBed(randomUUID.toString())) {
-
                     playerBedsData.setNewBed(player, bed, randomUUID.toString());
                     registerBed = true;
-
                 }
 
                 if (registerBed) {
                     playerData.set(new NamespacedKey(plugin, "beds"), new BedsDataType(), playerBedsData);
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    player.sendMessage(MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(
                             plugin.getMessages("bed-registered-successfully-message")));
                 }
-
             } else {
-                player.sendMessage(ChatColor.RED + plugin.getMessages("max-beds-message"));
+                player.sendMessage(Component.text(plugin.getMessages("max-beds-message"), NamedTextColor.RED));
             }
             player.setBedSpawnLocation(null);
             e.setCancelled(plugin.getConfig().getBoolean("disable-sleeping"));
         }
     }
-
 }

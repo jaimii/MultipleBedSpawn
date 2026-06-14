@@ -3,6 +3,7 @@ package me.gabij.multiplebedspawn;
 import me.gabij.multiplebedspawn.commands.NameCommand;
 import me.gabij.multiplebedspawn.commands.RemoveCommand;
 import me.gabij.multiplebedspawn.commands.RespawnMenuCommand;
+import me.gabij.multiplebedspawn.commands.ManageBedsCommand;
 import me.gabij.multiplebedspawn.commands.ShareCommand;
 import me.gabij.multiplebedspawn.listeners.*;
 
@@ -10,6 +11,7 @@ import org.bukkit.command.CommandMap;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.io.*;
 
@@ -18,6 +20,12 @@ public final class MultipleBedSpawn extends JavaPlugin {
     private Configuration messages;
 
     private static MultipleBedSpawn instance;
+
+    public static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.builder()
+            .character('&')
+            .hexCharacter('#')
+            .hexColors()
+            .build();
 
     @Override
     public void onEnable() {
@@ -30,6 +38,7 @@ public final class MultipleBedSpawn extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerRespawnListener(this), this);
         getServer().getPluginManager().registerEvents(new RespawnMenuHandler(this), this);
         getServer().getPluginManager().registerEvents(new RemoveMenuHandler(this), this);
+        getServer().getPluginManager().registerEvents(new ManageBedsMenuHandler(this), this);
         getServer().getPluginManager().registerEvents(new PlayerGetsOnBedListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
 
@@ -37,6 +46,7 @@ public final class MultipleBedSpawn extends JavaPlugin {
             CommandMap commandMap = me.gabij.multiplebedspawn.utils.CommandMapUtil.getCommandMap();
             commandMap.register(this.getName(), new RespawnMenuCommand(this, "respawnbed"));
             commandMap.register(this.getName(), new NameCommand(this, "renamebed"));
+            commandMap.register(this.getName(), new ManageBedsCommand(this, "managebeds"));
             if (this.getConfig().getBoolean("remove-beds-gui")) {
                 commandMap.register(this.getName(), new RemoveCommand(this, "removebed"));
             }

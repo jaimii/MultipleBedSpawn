@@ -4,12 +4,14 @@ import me.gabij.multiplebedspawn.MultipleBedSpawn;
 import me.gabij.multiplebedspawn.models.BedData;
 import me.gabij.multiplebedspawn.models.BedsDataType;
 import me.gabij.multiplebedspawn.models.PlayerBedsData;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import static me.gabij.multiplebedspawn.utils.BedsUtils.checkIfIsBed;
 
 import java.util.ArrayList;
 
-import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -43,20 +45,16 @@ public class NameCommand extends BukkitCommand {
             if (bed != null) {
                 BlockState blockState = bed.getState();
                 String bedUUID = null;
-                if (blockState instanceof TileState tileState) { // sets a randomUUID to the bed if the bed doesnt have
-                                                                 // it or get the bed uuid
+                if (blockState instanceof TileState tileState) {
                     PersistentDataContainer container = tileState.getPersistentDataContainer();
-
                     if (container.has(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING)) {
                         bedUUID = container.get(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING);
                     }
-
                     tileState.update();
-
                 }
 
                 if (bedUUID == null) {
-                    p.sendMessage(ChatColor.RED + plugin.getMessages("bed-not-registered-message"));
+                    p.sendMessage(Component.text(plugin.getMessages("bed-not-registered-message"), NamedTextColor.RED));
                     return false;
                 }
 
@@ -70,20 +68,18 @@ public class NameCommand extends BukkitCommand {
                         BedData bedData = playerBedsData.getPlayerBedData().get(bedUUID);
                         bedData.setBedName(name);
                         playerData.set(new NamespacedKey(plugin, "beds"), new BedsDataType(), playerBedsData);
-                        p.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                        p.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(
                                 plugin.getMessages("bed-name-registered-successfully-message")));
                     } else {
-                        p.sendMessage(ChatColor.RED + plugin.getMessages("bed-not-registered-message"));
+                        p.sendMessage(Component.text(plugin.getMessages("bed-not-registered-message"), NamedTextColor.RED));
                         return false;
                     }
                 }
             } else {
-                p.sendMessage(ChatColor.RED + plugin.getMessages("bed-not-found-message"));
+                p.sendMessage(Component.text(plugin.getMessages("bed-not-found-message"), NamedTextColor.RED));
                 return false;
             }
-
         }
         return true;
     }
-
 }

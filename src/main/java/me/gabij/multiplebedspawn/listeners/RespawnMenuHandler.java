@@ -4,6 +4,7 @@ import me.gabij.multiplebedspawn.MultipleBedSpawn;
 import me.gabij.multiplebedspawn.models.BedData;
 import me.gabij.multiplebedspawn.models.BedsDataType;
 import me.gabij.multiplebedspawn.models.PlayerBedsData;
+import me.gabij.multiplebedspawn.utils.PlayerUtils;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,6 +16,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,16 +39,25 @@ public class RespawnMenuHandler implements Listener {
         RespawnMenuHandler.plugin = plugin;
     }
 
+    private static String formatBiomeName(String name) {
+        if (name == null || name.isEmpty()) return "Unknown";
+        String[] parts = name.split("_");
+        StringBuilder sb = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+            sb.append(Character.toUpperCase(part.charAt(0)))
+                    .append(part.substring(1).toLowerCase())
+                    .append(" ");
+        }
+        return sb.toString().trim();
+    }
+
     public static void updateItens(Inventory gui, Player p) {
-
         if (gui.getViewers().toString().length() > 2) {
-
             ItemStack itens[] = gui.getContents();
             boolean hasActiveCooldown = false;
             for (ItemStack item : itens) {
-
                 if (item != null && item.hasItemMeta()) {
-
                     ItemMeta item_meta = item.getItemMeta();
                     PersistentDataContainer data = item_meta.getPersistentDataContainer();
 
@@ -52,9 +65,9 @@ public class RespawnMenuHandler implements Listener {
                             && data.has(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING)) {
 
                         long cooldown = data.get(new NamespacedKey(plugin, "cooldown"), PersistentDataType.LONG);
-                        List<String> lore = item_meta.getLore();
+                        List<Component> lore = item_meta.lore();
 
-                        int optionsCount = 2;
+                        int optionsCount = 3;
                         if (plugin.getConfig().getBoolean("disable-bed-world-desc")) {
                             optionsCount--;
                         }
@@ -68,23 +81,19 @@ public class RespawnMenuHandler implements Listener {
                             if (lore == null) {
                                 lore = new ArrayList<>();
                             }
+                            Component cdComp = MultipleBedSpawn.LEGACY_SERIALIZER.deserialize("&6&l" + plugin.getMessages("cooldown-text").replace("{1}", seconds));
                             if (lore.size() > optionsCount) {
-                                lore.set(
-                                        optionsCount,
-                                        ChatColor.GOLD + "" + ChatColor.BOLD
-                                                + plugin.getMessages("cooldown-text").replace("{1}", seconds));
+                                lore.set(optionsCount, cdComp);
                             } else {
-                                lore.add(
-                                        ChatColor.GOLD + "" + ChatColor.BOLD
-                                                + plugin.getMessages("cooldown-text").replace("{1}", seconds));
+                                lore.add(cdComp);
                             }
                         } else {
-                            if (lore.size() > optionsCount) {
+                            if (lore != null && lore.size() > optionsCount) {
                                 lore.remove(optionsCount);
                             }
                         }
 
-                        item_meta.setLore(lore);
+                        item_meta.lore(lore);
                         item.setItemMeta(item_meta);
                     }
                 }
@@ -95,14 +104,10 @@ public class RespawnMenuHandler implements Listener {
                     updateItens(gui, p);
                 }, 10L);
             }
-
         }
-
     }
 
     public static void openRespawnMenu(Player p) {
-
-        // gets how much beds player has to use on for loop and for the if check
         PersistentDataContainer playerData = p.getPersistentDataContainer();
         PlayerBedsData playerBedsData = null;
 
@@ -112,23 +117,18 @@ public class RespawnMenuHandler implements Listener {
             playerBedsData = playerData.get(new NamespacedKey(plugin, "beds"), new BedsDataType());
         }
 
-        // if the player doesnt have any beds than dont open menu
         if (playerBedsCount > 0) {
-
-            // sets stuff to player be invul and invis on spawn
             setPropPlayer(p);
 
-            // create inventory
             int bedCount = playerBedsCount + 1;
             Inventory gui = Bukkit.createInventory(p, 9 * ((int) Math.ceil(bedCount / (Double) 9.0)),
-                    ChatColor.translateAlternateColorCodes('&', plugin.getMessages("menu-title")));
+                    MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(plugin.getMessages("menu-title")));
 
             HashMap<String, BedData> beds = playerBedsData.getPlayerBedData();
             if (!plugin.getConfig().getBoolean("link-worlds")) {
                 World world = getPlayerRespawnLoc(p).getWorld();
                 HashMap<String, BedData> bedsT = (HashMap<String, BedData>) beds.clone();
                 beds.forEach((uuid, bed) -> {
-                    // clear lists so beds are only from the world that player is in
                     if (!bed.getBedWorld().equalsIgnoreCase(world.getName())) {
                         bedsT.remove(uuid);
                     }
@@ -141,41 +141,50 @@ public class RespawnMenuHandler implements Listener {
                 ItemStack item = new ItemStack(bed.getBedMaterial(), 1);
                 ItemMeta item_meta = item.getItemMeta();
                 String bedName = plugin.getMessages("default-bed-name").replace("{1}", cont.toString());
-                item_meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', bedName));
-                if (bed.getBedName() != null) {
-                    item_meta.setDisplayName(bed.getBedName());
-                }
+                Component nameComp = MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(bed.getBedName() != null ? bed.getBedName() : bedName);
+                item_meta.displayName(nameComp);
+
                 PersistentDataContainer data = item_meta.getPersistentDataContainer();
 
-                List<String> lore = new ArrayList<>();
+                List<Component> lore = new ArrayList<>();
                 if (!plugin.getConfig().getBoolean("disable-bed-world-desc")) {
-                    lore.add(ChatColor.DARK_PURPLE + bed.getBedWorld().toUpperCase());
+                    lore.add(Component.text(bed.getBedWorld().toUpperCase(), NamedTextColor.DARK_PURPLE));
                 }
                 if (!plugin.getConfig().getBoolean("disable-bed-coords-desc")) {
-                    String[] location = bed.getBedCoords().split(":");
+                    String[] location = PlayerUtils.splitThree(bed.getBedCoords());
                     String locText = "X: " + location[0].substring(0, location[0].length() - 2) +
                             " Y: " + location[1].substring(0, location[1].length() - 2) +
                             " Z: " + location[2].substring(0, location[2].length() - 2);
-                    lore.add(ChatColor.GRAY + locText);
+                    lore.add(Component.text(locText, NamedTextColor.GRAY));
                 }
-                // checks if has any cooldowns
-                if (bed.getBedCooldown() > 0L) {
 
+                World world = Bukkit.getWorld(bed.getBedWorld());
+                if (world != null) {
+                    String[] location = PlayerUtils.splitThree(bed.getBedCoords());
+                    double bx = Double.parseDouble(location[0]);
+                    double by = Double.parseDouble(location[1]);
+                    double bz = Double.parseDouble(location[2]);
+                    org.bukkit.block.Biome biome = world.getBiome(new Location(world, bx, by, bz));
+                    Component biomeComp = Component.text("Biome: ", NamedTextColor.GOLD)
+                            .append(Component.text(formatBiomeName(biome.getKey().getKey()), NamedTextColor.GREEN));
+                    lore.add(biomeComp);
+                }
+
+                if (bed.getBedCooldown() > 0L) {
                     long cooldown = bed.getBedCooldown();
-                    if (cooldown > System.currentTimeMillis()) { // if cooldown isnt expired
+                    if (cooldown > System.currentTimeMillis()) {
                         hasCooldown.set(true);
                         data.set(new NamespacedKey(plugin, "cooldown"), PersistentDataType.LONG, cooldown);
                     } else {
                         bed.setBedCooldown(0L);
                     }
-
                 }
 
                 data.set(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING, uuid);
                 data.set(new NamespacedKey(plugin, "location"), PersistentDataType.STRING, bed.getBedCoords());
                 data.set(new NamespacedKey(plugin, "world"), PersistentDataType.STRING, bed.getBedWorld());
 
-                item_meta.setLore(lore);
+                item_meta.lore(lore);
                 item.setItemMeta(item_meta);
                 gui.addItem(item);
                 cont.getAndIncrement();
@@ -189,34 +198,40 @@ public class RespawnMenuHandler implements Listener {
 
             ItemStack item = new ItemStack(Material.GRASS_BLOCK, 1);
             ItemMeta item_meta = item.getItemMeta();
-            item_meta.setDisplayName(ChatColor.YELLOW + "SPAWN");
+            item_meta.displayName(Component.text("SPAWN", NamedTextColor.YELLOW));
             item.setItemMeta(item_meta);
             gui.setItem(9 * ((int) Math.ceil(bedCount / (Double) 9.0)) - 1, item);
 
-            // I dont know why but if openInventory is not on a scheduler is does not open
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 p.openInventory(gui);
             }, 0L);
-
         } else {
-
             if (playerData.has(new NamespacedKey(plugin, "spawnLoc"))) {
-                Location location = getPlayerRespawnLoc(p);
                 playerData.remove(new NamespacedKey(plugin, "spawnLoc"));
                 undoPropPlayer(p);
+
+                World world = p.getWorld();
+                int spawnY = world.getHighestBlockYAt(0, 0);
+                if (spawnY < world.getMinHeight()) {
+                    spawnY = 64;
+                } else {
+                    spawnY += 1;
+                }
+                Location target = new Location(world, 0.5, spawnY, 0.5);
+
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    p.teleport(location);
+                    p.teleport(target);
                 }, 1L);
             }
-
         }
-
     }
 
     @EventHandler
     public void onMenuClick(InventoryClickEvent e) {
+        String viewTitle = PlainTextComponentSerializer.plainText().serialize(e.getView().title());
+        String menuTitle = PlainTextComponentSerializer.plainText().serialize(MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(plugin.getMessages("menu-title")));
 
-        if (e.getView().getTitle().equalsIgnoreCase(plugin.getMessages("menu-title"))) {
+        if (viewTitle.equalsIgnoreCase(menuTitle)) {
             e.setCancelled(true);
             Player p = (Player) e.getWhoClicked();
             if (e.getCurrentItem() != null) {
@@ -232,52 +247,49 @@ public class RespawnMenuHandler implements Listener {
                 double bedCount = playerBedsCount + 1;
                 int index = e.getSlot();
                 if (e.getCurrentItem().getType().toString().toLowerCase().contains("bed")) {
-
                     ItemMeta item_meta = e.getCurrentItem().getItemMeta();
                     PersistentDataContainer data = item_meta.getPersistentDataContainer();
 
-                    String bedCoord[] = data.get(new NamespacedKey(plugin, "location"), PersistentDataType.STRING)
-                            .split(":");
+                    String bedCoord[] = PlayerUtils.splitThree(data.get(new NamespacedKey(plugin, "location"), PersistentDataType.STRING));
                     String world = data.get(new NamespacedKey(plugin, "world"), PersistentDataType.STRING);
                     Location location = new Location(Bukkit.getWorld(world), Double.parseDouble(bedCoord[0]),
                             Double.parseDouble(bedCoord[1]), Double.parseDouble(bedCoord[2]));
                     String uuid = data.get(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING);
 
-                    if (checksIfBedExists(location, p, uuid)) {
-
+                    if (checksIfBedExists(location, p, uuid, true)) {
                         teleportPlayer(p, data, playerData, playerBedsData, uuid);
-
                     } else {
                         Bukkit.getScheduler().runTaskLater(plugin, () -> {
                             p.closeInventory();
                         }, 0L);
                     }
-
                 } else if (index == 9 * ((int) Math.ceil(bedCount / (Double) 9.0)) - 1) {
                     undoPropPlayer(p);
-                    Location location = getPlayerRespawnLoc(p);
+
+                    World world = p.getWorld();
+                    int spawnY = world.getHighestBlockYAt(0, 0);
+                    if (spawnY < world.getMinHeight()) {
+                        spawnY = 64;
+                    } else {
+                        spawnY += 1;
+                    }
+                    Location target = new Location(world, 0.5, spawnY, 0.5);
+
                     playerData.remove(new NamespacedKey(plugin, "spawnLoc"));
-                    p.teleport(location);
+                    p.teleport(target);
                     runCommandOnSpawn(p);
                 }
             }
-
         }
-
     }
 
     @EventHandler
     public void onMenuClose(InventoryCloseEvent e) {
-
         if (e.getView().getTitle().equalsIgnoreCase(plugin.getMessages("menu-title"))) {
-
             Player p = (Player) e.getPlayer();
             if (!p.getCanPickupItems()) {
                 openRespawnMenu(p);
             }
-
         }
-
     }
-
 }

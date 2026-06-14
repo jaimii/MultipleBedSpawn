@@ -5,7 +5,6 @@ import static me.gabij.multiplebedspawn.utils.BedsUtils.checkIfIsBed;
 import java.util.ArrayList;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -19,6 +18,9 @@ import org.bukkit.persistence.PersistentDataType;
 import me.gabij.multiplebedspawn.MultipleBedSpawn;
 import me.gabij.multiplebedspawn.models.BedsDataType;
 import me.gabij.multiplebedspawn.models.PlayerBedsData;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public class ShareCommand extends BukkitCommand {
     static MultipleBedSpawn plugin;
@@ -40,7 +42,7 @@ public class ShareCommand extends BukkitCommand {
             Player ownerPlayer = (Player) sender;
             Player receiverPlayer = Bukkit.getPlayer(args[0]);
             if (receiverPlayer == null) {
-                ownerPlayer.sendMessage(ChatColor.RED + plugin.getMessages("player-not-found"));
+                ownerPlayer.sendMessage(Component.text(plugin.getMessages("player-not-found"), NamedTextColor.RED));
                 return false;
             }
             if (receiverPlayer == ownerPlayer) {
@@ -50,7 +52,7 @@ public class ShareCommand extends BukkitCommand {
             if (bed != null) {
                 BlockState blockState = bed.getState();
                 String bedUUID = null;
-                if (blockState instanceof TileState tileState) { // gets the bed uuid
+                if (blockState instanceof TileState tileState) {
                     PersistentDataContainer container = tileState.getPersistentDataContainer();
                     if (container.has(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING)) {
                         bedUUID = container.get(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING);
@@ -58,7 +60,7 @@ public class ShareCommand extends BukkitCommand {
                 }
 
                 if (bedUUID == null) {
-                    ownerPlayer.sendMessage(ChatColor.RED + plugin.getMessages("bed-not-registered-message"));
+                    ownerPlayer.sendMessage(Component.text(plugin.getMessages("bed-not-registered-message"), NamedTextColor.RED));
                     return false;
                 }
 
@@ -72,25 +74,25 @@ public class ShareCommand extends BukkitCommand {
                         PersistentDataContainer receiverData = receiverPlayer.getPersistentDataContainer();
                         PlayerBedsData receiverBedsData = receiverData.has(new NamespacedKey(plugin, "beds"),
                                 new BedsDataType())
-                                        ? receiverData.get(new NamespacedKey(plugin, "beds"), new BedsDataType())
-                                        : new PlayerBedsData();
+                                ? receiverData.get(new NamespacedKey(plugin, "beds"), new BedsDataType())
+                                : new PlayerBedsData();
 
                         playerBedsData.shareBed(receiverBedsData, bedUUID);
                         receiverData.set(new NamespacedKey(plugin, "beds"), new BedsDataType(), receiverBedsData);
                         playerData.set(new NamespacedKey(plugin, "beds"), new BedsDataType(), playerBedsData);
 
-                        receiverPlayer.sendMessage(plugin.getMessages("bed-registered-successfully-message"));
+                        receiverPlayer.sendMessage(MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(
+                                plugin.getMessages("bed-registered-successfully-message")));
                     } else {
-                        ownerPlayer.sendMessage(ChatColor.RED + plugin.getMessages("bed-not-registered-message"));
+                        ownerPlayer.sendMessage(Component.text(plugin.getMessages("bed-not-registered-message"), NamedTextColor.RED));
                         return false;
                     }
                 }
             } else {
                 plugin.getLogger().info("Not found");
-                ownerPlayer.sendMessage(ChatColor.RED + plugin.getMessages("bed-not-found-message"));
+                ownerPlayer.sendMessage(Component.text(plugin.getMessages("bed-not-found-message"), NamedTextColor.RED));
                 return false;
             }
-
         }
         return true;
     }

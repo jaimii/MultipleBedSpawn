@@ -16,6 +16,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.HashMap;
 
@@ -24,7 +26,6 @@ public class BedsUtils {
 
     public static void removePlayerBed(String bedUUID, Player p) {
         PersistentDataContainer playerData = p.getPersistentDataContainer();
-        // checks to see if player has beds
         if (playerData.has(new NamespacedKey(plugin, "beds"), new BedsDataType())) {
             PlayerBedsData playerBedsData = playerData.get(new NamespacedKey(plugin, "beds"), new BedsDataType());
             HashMap<String, BedData> beds = playerBedsData.getPlayerBedData();
@@ -34,33 +35,63 @@ public class BedsUtils {
                 playerData.set(new NamespacedKey(plugin, "beds"), new BedsDataType(), playerBedsData);
 
                 World world = Bukkit.getWorld(bedData.getBedWorld());
-                String loc[] = bedData.getBedCoords().split(":");
-                Location locBed = new Location(world, Double.parseDouble(loc[0]), Double.parseDouble(loc[1]),
-                        Double.parseDouble(loc[2]));
-                Block bed = world.getBlockAt(locBed);
-                if (bed.getBlockData() instanceof Bed bedPart) {
-                    // since the data is in the head we need to set the Block bed to its head
-                    if (bedPart.getPart().toString() == "FOOT") {
-                        bed = (Block) bed.getRelative(bedPart.getFacing());
+                if (world != null) {
+                    String loc[] = PlayerUtils.splitThree(bedData.getBedCoords());
+                    Location locBed = new Location(world, Double.parseDouble(loc[0]), Double.parseDouble(loc[1]),
+                            Double.parseDouble(loc[2]));
+
+                    int chunkX = locBed.getBlockX() >> 4;
+                    int chunkZ = locBed.getBlockZ() >> 4;
+                    if (world.isChunkGenerated(chunkX, chunkZ)) {
+                        Block bed = world.getBlockAt(locBed);
+                        if (bed.getBlockData() instanceof Bed bedPart) {
+                            if (bedPart.getPart().toString() == "FOOT") {
+                                bed = (Block) bed.getRelative(bedPart.getFacing());
+                            }
+                        }
+                        BlockState blockState = bed.getState();
+                        if (blockState instanceof TileState tileState) {
+                            PersistentDataContainer container = tileState.getPersistentDataContainer();
+                            container.remove(new NamespacedKey(plugin, "uuid"));
+                            tileState.update();
+                        }
                     }
                 }
-                BlockState blockState = bed.getState();
-                if (blockState instanceof TileState tileState) {
-                    PersistentDataContainer container = tileState.getPersistentDataContainer();
-                    container.remove(new NamespacedKey(plugin, "uuid"));
-                    tileState.update();
-                }
-
             }
         }
     }
 
     public static boolean checksIfBedExists(Location locBed, Player p, String bedUUID) {
+        return checksIfBedExists(locBed, p, bedUUID, false);
+    }
+
+    public static boolean checksIfBedExists(Location locBed, Player p, String bedUUID, boolean forceLoad) {
         World world = locBed.getWorld();
+        if (world == null) {
+            removePlayerBed(bedUUID, p);
+            return false;
+        }
+
+        int chunkX = locBed.getBlockX() >> 4;
+        int chunkZ = locBed.getBlockZ() >> 4;
+
+        if (!world.isChunkGenerated(chunkX, chunkZ)) {
+            removePlayerBed(bedUUID, p);
+            String msg = plugin.getMessages("bed-no-longer-exists");
+            if (msg == null || msg.isEmpty()) {
+                msg = "One of your beds no longer exists (it may have been deleted or trimmed).";
+            }
+            p.sendMessage(MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(msg).color(NamedTextColor.RED));
+            return false;
+        }
+
+        if (!forceLoad && !world.isChunkLoaded(chunkX, chunkZ)) {
+            return true;
+        }
+
         Block bed = world.getBlockAt(locBed);
         boolean isBed = false;
         if (bed.getBlockData() instanceof Bed bedPart) {
-            // since the data is in the head we need to set the Block bed to its head
             if (bedPart.getPart().toString() == "FOOT") {
                 bed = (Block) bed.getRelative(bedPart.getFacing());
             }
@@ -68,12 +99,9 @@ public class BedsUtils {
         }
 
         if (!isBed) {
-
             removePlayerBed(bedUUID, p);
             return false;
-
         } else {
-
             BlockState blockState = bed.getState();
             if (blockState instanceof TileState tileState) {
                 PersistentDataContainer container = tileState.getPersistentDataContainer();
@@ -83,17 +111,13 @@ public class BedsUtils {
                     removePlayerBed(bedUUID, p);
                     return false;
                 }
-
             }
-
         }
-
         return true;
     }
 
     public static Block checkIfIsBed(Block block) {
         if (block != null && block.getBlockData() instanceof Bed bedPart) {
-            // since the data is in the head we need to set the Block bed to its head
             if (bedPart.getPart().toString() == "FOOT") {
                 block = block.getRelative(bedPart.getFacing());
             }

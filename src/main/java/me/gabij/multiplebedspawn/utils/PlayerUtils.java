@@ -8,12 +8,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 
 import static me.gabij.multiplebedspawn.utils.BedsUtils.checksIfBedExists;
 
@@ -21,18 +23,49 @@ public class PlayerUtils {
 
     static MultipleBedSpawn plugin = MultipleBedSpawn.getInstance();
 
+    // Fast index-based coordinate splitting, bypassing heavy regex splits
+    public static String[] splitThree(String str) {
+        if (str == null) return new String[]{"0", "0", "0"};
+        int first = str.indexOf(':');
+        int second = str.indexOf(':', first + 1);
+        if (first == -1 || second == -1) {
+            return str.split(":");
+        }
+        return new String[] {
+                str.substring(0, first),
+                str.substring(first + 1, second),
+                str.substring(second + 1)
+        };
+    }
+
+    // Fast index-based location splitting (including world names)
+    public static String[] splitFour(String str) {
+        if (str == null) return new String[]{"world", "0", "0", "0"};
+        int first = str.indexOf(':');
+        int second = str.indexOf(':', first + 1);
+        int third = str.indexOf(':', second + 1);
+        if (first == -1 || second == -1 || third == -1) {
+            return str.split(":");
+        }
+        return new String[] {
+                str.substring(0, first),
+                str.substring(first + 1, second),
+                str.substring(second + 1, third),
+                str.substring(third + 1)
+        };
+    }
+
     public static String locationToString(Location loc) {
         return loc.getWorld().getName() + ":" + loc.getX() + ":" + loc.getY() + ":" + loc.getZ();
     }
 
     public static Location stringToLocation(String locString) {
-        String[] loc = locString.split(":");
+        String[] loc = splitFour(locString);
         return new Location(Bukkit.getWorld(loc[0]), Double.parseDouble(loc[1]), Double.parseDouble(loc[2]),
                 Double.parseDouble(loc[3]));
     }
 
     public static void setPropPlayer(Player p) {
-
         PersistentDataContainer playerData = p.getPersistentDataContainer();
         if (!playerData.has(new NamespacedKey(plugin, "hasProp"), PersistentDataType.BOOLEAN)) {
             p.setInvulnerable(true);
@@ -43,6 +76,10 @@ public class PlayerUtils {
             playerData.set(new NamespacedKey(plugin, "canPickupItems"), PersistentDataType.BOOLEAN,
                     p.getCanPickupItems());
             p.setCanPickupItems(false);
+
+            // Saves original gamemode and sets player to spectator temporarily
+            playerData.set(new NamespacedKey(plugin, "lastGameMode"), PersistentDataType.STRING, p.getGameMode().name());
+            p.setGameMode(GameMode.SPECTATOR);
 
             if (plugin.getConfig().getBoolean("spawn-on-sky")) {
                 playerData.set(new NamespacedKey(plugin, "allowFly"), PersistentDataType.BOOLEAN, p.getAllowFlight());
@@ -57,7 +94,6 @@ public class PlayerUtils {
     }
 
     public static void undoPropPlayer(Player p) {
-
         PersistentDataContainer playerData = p.getPersistentDataContainer();
         if (playerData.has(new NamespacedKey(plugin, "hasProp"), PersistentDataType.BOOLEAN)) {
             playerData.remove(new NamespacedKey(plugin, "hasProp"));
@@ -73,6 +109,17 @@ public class PlayerUtils {
             p.setWalkSpeed(playerData.get(new NamespacedKey(plugin, "lastWalkspeed"), PersistentDataType.FLOAT));
             playerData.remove(new NamespacedKey(plugin, "lastWalkspeed"));
 
+            // Restores the original gamemode
+            if (playerData.has(new NamespacedKey(plugin, "lastGameMode"), PersistentDataType.STRING)) {
+                String gmName = playerData.get(new NamespacedKey(plugin, "lastGameMode"), PersistentDataType.STRING);
+                try {
+                    p.setGameMode(GameMode.valueOf(gmName));
+                } catch (Exception e) {
+                    p.setGameMode(GameMode.SURVIVAL);
+                }
+                playerData.remove(new NamespacedKey(plugin, "lastGameMode"));
+            }
+
             if (plugin.getConfig().getBoolean("spawn-on-sky")) {
                 p.setAllowFlight(playerData.get(new NamespacedKey(plugin, "allowFly"), PersistentDataType.BOOLEAN));
                 p.setFlying(false);
@@ -81,14 +128,12 @@ public class PlayerUtils {
                 playerData.remove(new NamespacedKey(plugin, "isFlying"));
             }
 
-
             p.closeInventory();
         }
-
     }
 
     public static void teleportPlayer(Player p, PersistentDataContainer data, PersistentDataContainer playerData,
-            PlayerBedsData playerBedsData, String uuid) {
+                                      PlayerBedsData playerBedsData, String uuid) {
         boolean isOkayToTP = true;
 
         if (data.has(new NamespacedKey(plugin, "cooldown"), PersistentDataType.LONG)
@@ -98,13 +143,12 @@ public class PlayerUtils {
             if (cooldown > System.currentTimeMillis()) {
                 isOkayToTP = false;
             }
-
         }
 
         if (isOkayToTP) {
             HashMap<String, BedData> beds = playerBedsData.getPlayerBedData();
             undoPropPlayer(p);
-            String loc[] = beds.get(uuid).getBedSpawnCoords().split(":");
+            String loc[] = splitThree(beds.get(uuid).getBedSpawnCoords());
             World world = Bukkit.getWorld(beds.get(uuid).getBedWorld());
             Location locSpawn = new Location(world, Double.parseDouble(loc[0]), Double.parseDouble(loc[1]),
                     Double.parseDouble(loc[2]));
@@ -134,8 +178,7 @@ public class PlayerUtils {
     public static Integer getPlayerBedsCount(Player p) {
         PersistentDataContainer playerData = p.getPersistentDataContainer();
         PlayerBedsData playerBedsData = null;
-        AtomicInteger playerBedsCount = new AtomicInteger();
-        playerBedsCount.set(0);
+        int playerBedsCount = 0;
         if (playerData.has(new NamespacedKey(plugin, "beds"), new BedsDataType())) {
             playerBedsData = playerData.get(new NamespacedKey(plugin, "beds"), new BedsDataType());
             if (playerBedsData != null && playerBedsData.getPlayerBedData() != null) {
@@ -144,28 +187,33 @@ public class PlayerUtils {
                 String worldName = world.getName();
                 if (!plugin.getConfig().getBoolean("link-worlds")) {
                     HashMap<String, BedData> bedsT = (HashMap<String, BedData>) beds.clone();
-                    beds.forEach((uuid, bedData) -> {
-                        // clear lists so beds are only from the world that player will respawn
-                        if (!bedData.getBedWorld().equalsIgnoreCase(worldName)) {
+                    List<String> originalKeys = new ArrayList<>(beds.keySet());
+                    for (String uuid : originalKeys) {
+                        BedData bedData = beds.get(uuid);
+                        if (bedData != null && !bedData.getBedWorld().equalsIgnoreCase(worldName)) {
                             bedsT.remove(uuid);
                         }
-                    });
+                    }
                     beds = bedsT;
                 }
-                playerBedsCount.set(beds.size());
-                beds.forEach((uuid, bedData) -> {
-                    String[] location = bedData.getBedCoords().split(":");
+                playerBedsCount = beds.size();
+
+                // Safe iteration over a copied list of keys to prevent ConcurrentModificationException
+                List<String> uuids = new ArrayList<>(beds.keySet());
+                for (String uuid : uuids) {
+                    BedData bedData = beds.get(uuid);
+                    if (bedData == null) continue;
+
+                    String[] location = splitThree(bedData.getBedCoords());
                     String bedWorld = bedData.getBedWorld();
                     Location bedLoc = new Location(Bukkit.getWorld(bedWorld), Double.parseDouble(location[0]),
                             Double.parseDouble(location[1]), Double.parseDouble(location[2]));
                     if (!checksIfBedExists(bedLoc, p, uuid)) {
-                        playerBedsCount.addAndGet(-1);
+                        playerBedsCount--;
                     }
-                });
-
+                }
             }
         }
-        return playerBedsCount.get();
+        return playerBedsCount;
     }
-
 }

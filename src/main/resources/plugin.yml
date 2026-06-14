@@ -1,9 +1,9 @@
 name: MultipleBedSpawn
 version: '${project.version}'
 main: me.gabij.multiplebedspawn.MultipleBedSpawn
-api-version: 1.19
+api-version: 1.21
 load: STARTUP
-authors: [ Gabi ]
+authors: [ Gabi, JustJaimii ]
 description: A simple plugin to allow players to choose which bed to respawn into.
 website: https://github.com/GabiJunkes
 permissions:
@@ -13,5 +13,3 @@ permissions:
   multiplebedspawn.maxcount.*:
     description: Allows to set custom max number of beds (ignores the config)
     default: false
-
-
