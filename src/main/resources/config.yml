@@ -13,3 +13,13 @@ exclusive-bed: false
 bed-sharing: false
 command-on-spawn: ""
 run-command-as-player: true
+#
+magic-mirror:
+  enabled: true
+  item-name: "" # Leave empty to match ANY Recovery Compass. Set a name (e.g. "Magic Mirror") to require a specific display name.
+  windup: 3 # Delay in seconds before teleporting. Set to 0 for instant warp.
+  enable-particles: true # Toggles swirl particles during windup and arrival
+  enable-sounds: true # Toggles sound effects during windup and arrival
+  sound-effects-volume: 1.0 # Sound effect volume (0.0 to 1.0)
+  enable-messages: true # Toggles windup countdown messages in chat
+  enable-lightning: true # Spawns a visual, harmless lightning bolt upon teleporting

@@ -1,24 +1,21 @@
 package me.gabij.multiplebedspawn;
 
-import me.gabij.multiplebedspawn.commands.NameCommand;
-import me.gabij.multiplebedspawn.commands.RemoveCommand;
-import me.gabij.multiplebedspawn.commands.RespawnMenuCommand;
-import me.gabij.multiplebedspawn.commands.ManageBedsCommand;
-import me.gabij.multiplebedspawn.commands.ShareCommand;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import me.gabij.multiplebedspawn.commands.*;
 import me.gabij.multiplebedspawn.listeners.*;
-
-import org.bukkit.command.CommandMap;
+import me.gabij.multiplebedspawn.utils.Keys;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.io.*;
+import java.util.List;
 
 public final class MultipleBedSpawn extends JavaPlugin {
 
     private Configuration messages;
-
     private static MultipleBedSpawn instance;
 
     public static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.builder()
@@ -31,40 +28,45 @@ public final class MultipleBedSpawn extends JavaPlugin {
     public void onEnable() {
         instance = this;
 
+        // Initialize cached Keys container
+        Keys.init(this);
+
         getConfig().options().copyDefaults(true);
         saveConfig();
         createLanguageConfig();
 
+        // Register event listeners
         getServer().getPluginManager().registerEvents(new PlayerRespawnListener(this), this);
         getServer().getPluginManager().registerEvents(new RespawnMenuHandler(this), this);
         getServer().getPluginManager().registerEvents(new RemoveMenuHandler(this), this);
         getServer().getPluginManager().registerEvents(new ManageBedsMenuHandler(this), this);
         getServer().getPluginManager().registerEvents(new PlayerGetsOnBedListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
+        getServer().getPluginManager().registerEvents(new MagicMirrorListener(this), this);
 
-        try {
-            CommandMap commandMap = me.gabij.multiplebedspawn.utils.CommandMapUtil.getCommandMap();
-            commandMap.register(this.getName(), new RespawnMenuCommand(this, "respawnbed"));
-            commandMap.register(this.getName(), new NameCommand(this, "renamebed"));
-            commandMap.register(this.getName(), new ManageBedsCommand(this, "managebeds"));
+        // Register commands natively using Paper's 26.3 Lifecycle API
+        this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
+            final Commands commands = event.registrar();
+
+            commands.register("respawnbed", "Opens a menu with saved beds", List.of(), new RespawnMenuCommand(this));
+            commands.register("renamebed", "Changes the name of the bed you are looking at", List.of(), new NameCommand(this));
+            commands.register("managebeds", "Opens a menu to manage, rename, and remove your beds", List.of("beds", "editbeds"), new ManageBedsCommand(this));
+
             if (this.getConfig().getBoolean("remove-beds-gui")) {
-                commandMap.register(this.getName(), new RemoveCommand(this, "removebed"));
+                commands.register("removebed", "Opens a menu to remove saved beds", List.of(), new RemoveCommand(this));
             }
             if (this.getConfig().getBoolean("bed-sharing")) {
-                commandMap.register(this.getName(), new ShareCommand(this, "sharebed"));
+                commands.register("sharebed", "Gives bed to another player", List.of(), new ShareCommand(this));
             }
-            this.getLogger().info("Commands added successfully");
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            this.getLogger().warning("Could not access commandMap. Commands will not work");
-            this.getLogger().warning(e.getMessage());
-        }
+        });
+
+        this.getLogger().info("Commands registered via Paper Lifecycle API successfully.");
     }
 
     public static MultipleBedSpawn getInstance() {
         return instance;
     }
 
-    // get message of selected language
     public String getMessages(String path) {
         return this.messages.getString(path);
     }
@@ -72,10 +74,10 @@ public final class MultipleBedSpawn extends JavaPlugin {
     private void createLanguageConfig() {
         String lang = this.getConfig().getString("lang");
         InputStream input;
-        try { // tries getting selected languages
+        try {
             input = getClass().getClassLoader().getResourceAsStream("languages/{key}.yml".replace("{key}", lang));
             this.messages = YamlConfiguration.loadConfiguration(new InputStreamReader(input));
-        } catch (Exception e) { // else sets enUS as default
+        } catch (Exception e) {
             input = getClass().getClassLoader().getResourceAsStream("languages/enUS.yml");
             this.messages = YamlConfiguration.loadConfiguration(new InputStreamReader(input));
         }

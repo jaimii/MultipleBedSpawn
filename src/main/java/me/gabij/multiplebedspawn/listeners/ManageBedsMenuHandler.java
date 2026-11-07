@@ -2,8 +2,10 @@ package me.gabij.multiplebedspawn.listeners;
 
 import me.gabij.multiplebedspawn.MultipleBedSpawn;
 import me.gabij.multiplebedspawn.models.BedData;
-import me.gabij.multiplebedspawn.models.BedsDataType;
 import me.gabij.multiplebedspawn.models.PlayerBedsData;
+import me.gabij.multiplebedspawn.utils.BedDataCache;
+import me.gabij.multiplebedspawn.utils.BedsUtils;
+import me.gabij.multiplebedspawn.utils.Keys;
 import me.gabij.multiplebedspawn.utils.PlayerUtils;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
@@ -37,60 +39,43 @@ public class ManageBedsMenuHandler implements Listener {
         ManageBedsMenuHandler.plugin = plugin;
     }
 
-    private static String formatBiomeName(String name) {
-        if (name == null || name.isEmpty()) return "Unknown";
-        String[] parts = name.split("_");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            if (part.isEmpty()) continue;
-            sb.append(Character.toUpperCase(part.charAt(0)))
-                    .append(part.substring(1).toLowerCase())
-                    .append(" ");
-        }
-        return sb.toString().trim();
-    }
-
     public static void openManageMenu(Player p) {
-        PersistentDataContainer playerData = p.getPersistentDataContainer();
-        PlayerBedsData playerBedsData = null;
-
+        PlayerBedsData playerBedsData = BedDataCache.get(p);
         int playerBedsCount = getPlayerBedsCount(p);
-
-        if (playerData.has(new NamespacedKey(plugin, "beds"), new BedsDataType())) {
-            playerBedsData = playerData.get(new NamespacedKey(plugin, "beds"), new BedsDataType());
-        }
 
         if (playerBedsCount > 0) {
             int bedCount = playerBedsCount + 1;
-            Inventory gui = Bukkit.createInventory(p, 9 * ((int) Math.ceil(bedCount / (Double) 9.0)),
+            int invSize = Math.min(54, ((bedCount + 8) / 9) * 9);
+            Inventory gui = Bukkit.createInventory(p, invSize,
                     Component.text("Manage Your Beds", NamedTextColor.DARK_AQUA));
 
             HashMap<String, BedData> beds = playerBedsData.getPlayerBedData();
-            if (!plugin.getConfig().getBoolean("link-worlds")) {
-                HashMap<String, BedData> bedsT = (HashMap<String, BedData>) beds.clone();
-                beds.forEach((uuid, bed) -> {
-                    if (!bed.getBedWorld().equalsIgnoreCase(p.getWorld().getName())) {
-                        bedsT.remove(uuid);
-                    }
-                });
-                beds = bedsT;
-            }
+            boolean linkWorlds = plugin.getConfig().getBoolean("link-worlds");
+            String currentWorldName = p.getWorld().getName();
+            boolean disableWorld = plugin.getConfig().getBoolean("disable-bed-world-desc");
+            boolean disableCoords = plugin.getConfig().getBoolean("disable-bed-coords-desc");
+            String defaultNameTemplate = plugin.getMessages("default-bed-name");
+
             AtomicInteger cont = new AtomicInteger(1);
             beds.forEach((uuid, bed) -> {
+                if (!linkWorlds && !bed.getBedWorld().equalsIgnoreCase(currentWorldName)) {
+                    return;
+                }
+
                 ItemStack item = new ItemStack(bed.getBedMaterial(), 1);
                 ItemMeta item_meta = item.getItemMeta();
-                String bedName = plugin.getMessages("default-bed-name").replace("{1}", cont.toString());
+                String bedName = defaultNameTemplate.replace("{1}", cont.toString());
                 Component nameComp = MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(bed.getBedName() != null ? bed.getBedName() : bedName);
                 item_meta.displayName(nameComp);
 
                 PersistentDataContainer data = item_meta.getPersistentDataContainer();
 
                 List<Component> lore = new ArrayList<>();
-                if (!plugin.getConfig().getBoolean("disable-bed-world-desc")) {
+                if (!disableWorld) {
                     lore.add(Component.text(bed.getBedWorld().toUpperCase(), NamedTextColor.DARK_PURPLE));
                 }
-                if (!plugin.getConfig().getBoolean("disable-bed-coords-desc")) {
-                    String[] location = PlayerUtils.splitThree(bed.getBedCoords());
+                String[] location = PlayerUtils.splitThree(bed.getBedCoords());
+                if (!disableCoords) {
                     String locText = "X: " + location[0].substring(0, location[0].length() - 2) +
                             " Y: " + location[1].substring(0, location[1].length() - 2) +
                             " Z: " + location[2].substring(0, location[2].length() - 2);
@@ -99,13 +84,12 @@ public class ManageBedsMenuHandler implements Listener {
 
                 World world = Bukkit.getWorld(bed.getBedWorld());
                 if (world != null) {
-                    String[] location = PlayerUtils.splitThree(bed.getBedCoords());
-                    double bx = Double.parseDouble(location[0]);
-                    double by = Double.parseDouble(location[1]);
-                    double bz = Double.parseDouble(location[2]);
-                    org.bukkit.block.Biome biome = world.getBiome(new Location(world, bx, by, bz));
+                    int bx = (int) Double.parseDouble(location[0]);
+                    int by = (int) Double.parseDouble(location[1]);
+                    int bz = (int) Double.parseDouble(location[2]);
+                    org.bukkit.block.Biome biome = world.getBiome(bx, by, bz);
                     Component biomeComp = Component.text("Biome: ", NamedTextColor.GOLD)
-                            .append(Component.text(formatBiomeName(biome.getKey().getKey()), NamedTextColor.GREEN));
+                            .append(Component.text(BedsUtils.formatBiomeName(biome.getKey().getKey()), NamedTextColor.GREEN));
                     lore.add(biomeComp);
                 }
 
@@ -113,9 +97,9 @@ public class ManageBedsMenuHandler implements Listener {
                 lore.add(Component.text("Left-Click to Rename", NamedTextColor.GREEN));
                 lore.add(Component.text("Right-Click to Delete", NamedTextColor.RED));
 
-                data.set(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING, uuid);
-                data.set(new NamespacedKey(plugin, "location"), PersistentDataType.STRING, bed.getBedCoords());
-                data.set(new NamespacedKey(plugin, "world"), PersistentDataType.STRING, bed.getBedWorld());
+                data.set(Keys.UUID, PersistentDataType.STRING, uuid);
+                data.set(Keys.LOCATION, PersistentDataType.STRING, bed.getBedCoords());
+                data.set(Keys.WORLD, PersistentDataType.STRING, bed.getBedWorld());
 
                 item_meta.lore(lore);
                 item.setItemMeta(item_meta);
@@ -127,11 +111,9 @@ public class ManageBedsMenuHandler implements Listener {
             ItemMeta item_meta = item.getItemMeta();
             item_meta.displayName(Component.text("Close Menu", NamedTextColor.YELLOW));
             item.setItemMeta(item_meta);
-            gui.setItem(9 * ((int) Math.ceil(bedCount / (Double) 9.0)) - 1, item);
+            gui.setItem(invSize - 1, item);
 
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                p.openInventory(gui);
-            }, 0L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> p.openInventory(gui), 0L);
         } else {
             p.sendMessage(Component.text("You do not have any registered beds to manage.", NamedTextColor.RED));
         }
@@ -147,7 +129,7 @@ public class ManageBedsMenuHandler implements Listener {
                 if (e.getCurrentItem().getType().toString().toLowerCase().contains("bed")) {
                     ItemMeta item_meta = e.getCurrentItem().getItemMeta();
                     PersistentDataContainer data = item_meta.getPersistentDataContainer();
-                    String uuid = data.get(new NamespacedKey(plugin, "uuid"), PersistentDataType.STRING);
+                    String uuid = data.get(Keys.UUID, PersistentDataType.STRING);
 
                     if (e.getClick() == ClickType.RIGHT) {
                         removePlayerBed(uuid, p);
@@ -171,7 +153,7 @@ public class ManageBedsMenuHandler implements Listener {
         if (renamingPlayers.containsKey(p.getUniqueId())) {
             event.setCancelled(true);
             String bedUuid = renamingPlayers.remove(p.getUniqueId());
-            String message = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            String message = MultipleBedSpawn.LEGACY_SERIALIZER.serialize(event.message()).trim();
 
             if (message.equalsIgnoreCase("cancel")) {
                 p.sendMessage(Component.text("Renaming cancelled.", NamedTextColor.RED));
@@ -180,16 +162,13 @@ public class ManageBedsMenuHandler implements Listener {
             }
 
             Bukkit.getScheduler().runTask(plugin, () -> {
-                PersistentDataContainer playerData = p.getPersistentDataContainer();
-                if (playerData.has(new NamespacedKey(plugin, "beds"), new BedsDataType())) {
-                    PlayerBedsData playerBedsData = playerData.get(new NamespacedKey(plugin, "beds"), new BedsDataType());
-                    if (playerBedsData != null && playerBedsData.hasBed(bedUuid)) {
-                        playerBedsData.getPlayerBedData().get(bedUuid).setBedName(message);
-                        playerData.set(new NamespacedKey(plugin, "beds"), new BedsDataType(), playerBedsData);
+                PlayerBedsData playerBedsData = BedDataCache.get(p);
+                if (playerBedsData != null && playerBedsData.hasBed(bedUuid)) {
+                    playerBedsData.getPlayerBedData().get(bedUuid).setBedName(message);
+                    BedDataCache.set(p, playerBedsData);
 
-                        Component displayName = MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(message);
-                        p.sendMessage(Component.text("Bed successfully renamed to: ", NamedTextColor.GREEN).append(displayName));
-                    }
+                    Component displayName = MultipleBedSpawn.LEGACY_SERIALIZER.deserialize(message);
+                    p.sendMessage(Component.text("Bed successfully renamed to: ", NamedTextColor.GREEN).append(displayName));
                 }
                 openManageMenu(p);
             });

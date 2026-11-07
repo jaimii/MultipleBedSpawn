@@ -1,31 +1,25 @@
 package me.gabij.multiplebedspawn.commands;
 
+import io.papermc.paper.command.brigadier.BasicCommand;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.gabij.multiplebedspawn.MultipleBedSpawn;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.defaults.BukkitCommand;
 import org.bukkit.entity.Player;
 
 import static me.gabij.multiplebedspawn.listeners.ManageBedsMenuHandler.openManageMenu;
 
-import java.util.ArrayList;
+public class ManageBedsCommand implements BasicCommand {
+    private final MultipleBedSpawn plugin;
 
-public class ManageBedsCommand extends BukkitCommand {
-    static MultipleBedSpawn plugin;
-
-    public ManageBedsCommand(MultipleBedSpawn plugin, String name) {
-        super(name);
-        ManageBedsCommand.plugin = plugin;
-        this.description = "Opens a menu to manage, rename, and remove your beds";
-        this.usageMessage = "/managebeds";
-        this.setAliases(new ArrayList<String>());
+    public ManageBedsCommand(MultipleBedSpawn plugin) {
+        this.plugin = plugin;
     }
 
     @Override
-    public boolean execute(CommandSender sender, String alias, String[] args) {
-        if (sender instanceof Player) {
-            Player p = (Player) sender;
+    public void execute(CommandSourceStack stack, String[] args) {
+        CommandSender sender = stack.getSender();
+        if (sender instanceof Player p) {
             openManageMenu(p);
         }
-        return true;
     }
 }

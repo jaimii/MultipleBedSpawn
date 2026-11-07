@@ -1,9 +1,9 @@
 name: MultipleBedSpawn
 version: '${project.version}'
 main: me.gabij.multiplebedspawn.MultipleBedSpawn
-api-version: 1.21
+api-version: '26.3'
 load: STARTUP
-authors: [ Gabi, JustJaimii ]
+authors: [ Gabi, JustJamii ]
 description: A simple plugin to allow players to choose which bed to respawn into.
 website: https://github.com/GabiJunkes
 permissions:
@@ -13,3 +13,6 @@ permissions:
   multiplebedspawn.maxcount.*:
     description: Allows to set custom max number of beds (ignores the config)
     default: false
+  multiplebedspawn.magicmirror:
+    description: Allows using the Recovery Compass Magic Mirror feature
+    default: true
